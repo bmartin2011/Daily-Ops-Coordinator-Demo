@@ -114,6 +114,7 @@ ii.	Combine By: Position
 
 6.	✅ Step 6: Group Deliveries by Driver (Clustering).
 a.	Add a **Code** node `"Wrap Deliveries"`.
+```python
 return [
   {
     json: {
@@ -121,11 +122,13 @@ return [
     }
   }
 ];
+```
 b.	Add a **Merge** node to combine it with `"Number of Drivers"`.
 i.	Mode: Comine
 ii.	Combine By: Position
  
 c.	Add a **Code** node `"K-Means"` to assign `DriverGroup` using lat/lng.
+```python
 function distance(a, b) {
   return Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
 }
@@ -194,8 +197,10 @@ return input.deliveries.map((d, i) => ({
     DriverGroup: `Driver ${labels[i] + 1}`
   }
 }));
+```
 7.	✅ Step 7: Sort Each Route (Nearest Neighbor).
 a.	Add **Code** node `"List Sort"` to group by `DriverGroup`.
+```python
 const grouped = {};
 
 for (const item of items) {
@@ -219,7 +224,9 @@ return [
     json: grouped
   }
 ];
+```
 b.	Add **Code** node `"Nearest Neighbor"` to assign `StopOrder`.
+```python
 function distance(a, b) {
   const dx = a.lat - b.lat;
   const dy = a.lon - b.lon;
@@ -279,6 +286,7 @@ return [
     json: sortedGroups
   }
 ];
+```
 8.	✅ Step 8: Output Final Assignments.
 a.	Option A: Export to Trello
 i.	Add a **Trello node**
