@@ -1,0 +1,439 @@
+{
+  "name": "Daily Ops Coordinator Demo",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## I'm a Daily Ops Coordinator Workflow\n**Double click** to edit me. [Guide](https://docs.n8n.io/workflows/sticky-notes/)\n\n🛠️ Daily Ops Coordinator – Prepares daily task lists, routes, and updates boards automatically",
+        "height": 640,
+        "width": 2960
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -880,
+        -360
+      ],
+      "typeVersion": 1,
+      "id": "04712737-15be-47d5-8bfd-efee5fa8fc12",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -820,
+        -180
+      ],
+      "id": "bbf499f2-b80c-4fb9-9026-ec5227cfb861",
+      "name": "When clicking ‘Test workflow’"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Ho-gmBDs8893t80BhivIVZsjK-SjuTm-KRQ1XOmNcbQ",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Ho-gmBDs8893t80BhivIVZsjK-SjuTm-KRQ1XOmNcbQ/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        -580,
+        -20
+      ],
+      "id": "7d733590-c885-4271-b2d5-8dcc0da03286",
+      "name": "Google Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "LgKBs7ya2MNPddvw",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const { Address, City, [\"Zip Code\"]: ZipCode } = item.json;\n\n  // Correct template literal interpolation\n  const fullAddress = `${Address}, ${City}, TX ${ZipCode}`;\n\n  const encodedAddress = encodeURIComponent(fullAddress);\n  const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodedAddress}&format=json&addressdetails=0&limit=1`;\n\n  return {\n    json: {\n      ...item.json,\n      address: fullAddress,\n      nominatim_url: nominatimUrl\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -360,
+        -20
+      ],
+      "id": "8647085b-2deb-40cf-a114-be9b9154d2d5",
+      "name": "Format addresses for Nominatim"
+    },
+    {
+      "parameters": {
+        "url": "={{$json[\"nominatim_url\"]}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "n8n-geocoder-lab"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -80,
+        120
+      ],
+      "id": "66de3de9-a6cb-4552-9584-7927863684ac",
+      "name": "HTTP Request",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      deliveries: items.map(item => item.json)\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        -100
+      ],
+      "id": "4fb203fd-f7f7-4ef1-bc74-468fe64debe1",
+      "name": "Wrap Deliveries"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d033ffc8-ddc3-4e32-ad8a-a48edf6092ee",
+              "name": "Number_of_Drivers",
+              "value": "3",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        360,
+        -300
+      ],
+      "id": "a1b90e4d-7812-421b-b139-ecf00f43ac1b",
+      "name": "Number of Drivers"
+    },
+    {
+      "parameters": {
+        "jsCode": "const grouped = {};\n\nfor (const item of items) {\n  const d = item.json;\n  const group = d.DriverGroup;\n\n  if (!group) {\n    throw new Error(`Missing 'DriverGroup' on delivery ID ${d[\"Delivery ID\"]}`);\n  }\n\n  if (!grouped[group]) {\n    grouped[group] = [];\n  }\n\n  grouped[group].push(d);\n}\n\n// Wrap into one output item\nreturn [\n  {\n    json: grouped\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1060,
+        -120
+      ],
+      "id": "d1c35a61-845d-43b6-875d-7ac5e23be1a0",
+      "name": "LIst Sort"
+    },
+    {
+      "parameters": {
+        "jsCode": "function distance(a, b) {\n  const dx = a.lat - b.lat;\n  const dy = a.lon - b.lon;\n  return Math.sqrt(dx * dx + dy * dy);\n}\n\nfunction nearestNeighbor(deliveries) {\n  const unvisited = [...deliveries];\n  const ordered = [];\n\n  // Start at the first delivery\n  let current = unvisited.shift();\n  ordered.push(current);\n\n  while (unvisited.length > 0) {\n    let nearestIndex = 0;\n    let minDistance = distance(current, unvisited[0]);\n\n    for (let i = 1; i < unvisited.length; i++) {\n      const d = distance(current, unvisited[i]);\n      if (d < minDistance) {\n        minDistance = d;\n        nearestIndex = i;\n      }\n    }\n\n    current = unvisited.splice(nearestIndex, 1)[0];\n    ordered.push(current);\n  }\n\n  return ordered;\n}\n\n// Sort each group\nconst grouped = items[0].json;\nconst sortedGroups = {};\n\nfor (const driver in grouped) {\n  const deliveries = grouped[driver];\n\n  const enriched = deliveries.map(d => ({\n    ...d,\n    lat: parseFloat(d.lat),\n    lon: parseFloat(d.lon)\n  }));\n\n  const sorted = nearestNeighbor(enriched);\n\n  // Optionally add a stop index\n  sorted.forEach((d, i) => d.StopOrder = i + 1);\n\n  sortedGroups[driver] = sorted;\n}\n\nreturn [\n  {\n    json: sortedGroups\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        -120
+      ],
+      "id": "f735ac86-804d-49cc-8d84-5b5e8232ff57",
+      "name": "Nearest Neighbor"
+    },
+    {
+      "parameters": {
+        "jsCode": "function distance(a, b) {\n  return Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);\n}\n\nfunction kMeans(points, k, maxIterations = 100) {\n  const centroids = points.slice(0, k).map(p => [...p]);\n  let labels = new Array(points.length).fill(0);\n\n  for (let iter = 0; iter < maxIterations; iter++) {\n    labels = points.map(p => {\n      const dists = centroids.map(c => distance(p, c));\n      return dists.indexOf(Math.min(...dists));\n    });\n\n    const newCentroids = Array.from({ length: k }, () => [0, 0]);\n    const counts = Array(k).fill(0);\n\n    points.forEach((p, i) => {\n      const label = labels[i];\n      newCentroids[label][0] += p[0];\n      newCentroids[label][1] += p[1];\n      counts[label]++;\n    });\n\n    for (let i = 0; i < k; i++) {\n      if (counts[i] === 0) throw new Error(`Cluster ${i + 1} has no assigned points.`);\n      centroids[i][0] = newCentroids[i][0] / counts[i];\n      centroids[i][1] = newCentroids[i][1] / counts[i];\n    }\n  }\n\n  return labels;\n}\n\n// Extract structured input\nconst input = items[0].json;\n\nif (!input.deliveries || !Array.isArray(input.deliveries)) {\n  throw new Error(\"Missing or invalid 'deliveries' array\");\n}\n\nconst numDrivers = parseInt(input.Number_of_Drivers, 10);\nif (isNaN(numDrivers) || numDrivers < 1) {\n  throw new Error(\"Invalid or missing 'Number_of_Drivers'\");\n}\n\n// Convert coordinates\nconst coords = input.deliveries.map((d, i) => {\n  const lat = parseFloat(d.lat);\n  const lon = parseFloat(d.lon);\n\n  if (isNaN(lat) || isNaN(lon)) {\n    throw new Error(`Invalid lat/lon at delivery index ${i}`);\n  }\n\n  return [lat, lon];\n});\n\n// Run clustering\nconst labels = kMeans(coords, numDrivers);\n\n// Return updated deliveries with DriverGroup\nreturn input.deliveries.map((d, i) => ({\n  json: {\n    ...d,\n    DriverGroup: `Driver ${labels[i] + 1}`\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        -120
+      ],
+      "id": "0b5eb0e8-c7a1-4b1a-9bbd-e7fe11658131",
+      "name": "K-Means"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        620,
+        -120
+      ],
+      "id": "59c3e3ca-3d99-4fee-b4fe-dbbec16c95c7",
+      "name": "Merge Drivers into Deliveries",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        140,
+        -100
+      ],
+      "id": "46ee5056-a4bb-49c2-bb65-71954d4b1062",
+      "name": "Merge Past info with results"
+    },
+    {
+      "parameters": {
+        "resource": "board",
+        "operation": "get",
+        "id": {
+          "__rl": true,
+          "value": "https://trello.com/b/P25zC3Rj/daily-ops-coordinator-demo",
+          "mode": "url"
+        },
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.trello",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        -300
+      ],
+      "id": "5fb51a71-b801-471b-95ff-58db1e1ed1e7",
+      "name": "Trello",
+      "credentials": {
+        "trelloApi": {
+          "id": "WttT4OcZOXQ8CUcF",
+          "name": "Trello account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/routes/route_manifest_{{ $now.format('yyyy-MM-dd') }}.json\n",
+        "dataPropertyName": "=data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        0
+      ],
+      "id": "b64ecda4-3178-4e58-8d49-9e352869bfdb",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1520,
+        0
+      ],
+      "id": "0a69093a-e7cd-4a3f-b76f-537d5a5a0236",
+      "name": "Convert to File"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Test workflow’": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Number of Drivers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Format addresses for Nominatim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format addresses for Nominatim": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Past info with results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge Past info with results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Wrap Deliveries": {
+      "main": [
+        [
+          {
+            "node": "Merge Drivers into Deliveries",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Number of Drivers": {
+      "main": [
+        [
+          {
+            "node": "Merge Drivers into Deliveries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LIst Sort": {
+      "main": [
+        [
+          {
+            "node": "Nearest Neighbor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "K-Means": {
+      "main": [
+        [
+          {
+            "node": "LIst Sort",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Drivers into Deliveries": {
+      "main": [
+        [
+          {
+            "node": "K-Means",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Past info with results": {
+      "main": [
+        [
+          {
+            "node": "Wrap Deliveries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nearest Neighbor": {
+      "main": [
+        [
+          {
+            "node": "Trello",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trello": {
+      "main": [
+        []
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        []
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2944883b-fb0b-48bf-b77c-f1a72d212f8e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "322f3284c9096fdbf2191b3b23a48f6a404a99bfb27f2f29e4a16058eed366bd"
+  },
+  "id": "rr5rHxNL4EvWKGd8",
+  "tags": []
+}
